@@ -7,12 +7,14 @@ pub enum DataType {
     // Add more data types as needed
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+// Used for defining the schema
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Column {
     pub name: String,
     pub data_type: DataType,
 }
 
+// Used for defining the schema
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     Integer(i64),

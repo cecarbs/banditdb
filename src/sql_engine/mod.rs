@@ -8,11 +8,17 @@ use crate::db::data_types::{Column, Value};
 
 pub fn process_sql(input: &str) -> Result<SqlCommand, String> {
     let tokens = tokenizer::tokenize(input);
-    parser::parse(&tokens)
+    match tokens {
+        Ok(tokens) => parser::parse(&tokens),
+        Err(e) => Err(e),
+    }
+
 }
 
 // Use struct like enum to hold the data and represent the different types of operations useful to
 // the db
+
+#[derive(Debug, PartialEq)]
 pub enum SqlCommand {
     CreateTable {
         name: String,
@@ -20,12 +26,23 @@ pub enum SqlCommand {
     },
     Insert {
         table: String,
-        values: Vec<Value>,
+        columns: Vec<String>,
+        values: Vec<String>,
     },
     Select {
         table: String,
         columns: Vec<String>,
-        where_clause: Option<String>,
+        where_clause: Option<Vec<Condition>>,
     },
     // Add other command types as needed
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Condition {
+    Comparison {
+        left: String,
+        operator: String,
+        right: String,
+    },
+    // Add more variants as needed, e.g., for AND, OR, etc.
 }

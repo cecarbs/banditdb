@@ -1,6 +1,6 @@
-use crate::db::data_types::{Column, DataType, Value};
-
 use super::tokenizer::Token;
+use crate::db::data_types::{Column, DataType, Value};
+use crate::sql_engine::tokenizer::Token::Keyword;
 // pub struct Repl {}
 //
 // impl Repl {
@@ -65,7 +65,7 @@ use super::tokenizer::Token;
 //         Some((table_name, values))
 //     }
 // }
-use super::SqlCommand;
+use super::{Condition, SqlCommand};
 
 pub fn parse(tokens: &[Token]) -> Result<SqlCommand, String> {
     match tokens.get(0) {
@@ -80,17 +80,108 @@ pub fn parse(tokens: &[Token]) -> Result<SqlCommand, String> {
 }
 
 fn parse_create_table(tokens: &[Token]) -> Result<SqlCommand, String> {
-    // Implementation for CREATE TABLE parsing
-    // This will be similar to our previous parse_create_table function,
-    // but operating on tokens instead of a string
-    // ...
-    todo!()
+    let mut iter = tokens.iter().peekable();
+
+    loop {
+        match iter.next() {
+            Some(Token::Keyword(keyword)) if keyword == "CREATE" => continue,
+            Some(Token::Keyword(keyword)) if keyword == "TABLE" => break,
+            _ => return Err("Expected CREATE TABLE keywords".to_string()),
+        }
+    }
+
+    let table_name = match iter.next() {
+        Some(Token::Identifier(name)) => name.clone(),
+        _ => return Err("Expected table name".to_string()),
+    };
+
+    let mut columns: Vec<Column> = Vec::new();
+    let mut data_types: Vec<String>
+    loop {
+        match iter.next() {
+            Some(Token::Symbol('(')) => continue,
+            Some(Token::Identifier()) =>
+            Some(Token::Symbol(')')) => break,
+            _ => return Err("Expected a column name or data type.".to_string()),
+        }
+    }
+
+    // Ensure we've consumed all tokens except for a possible semicolon
+    match iter.next() {
+        Some(Token::Semicolon) => {}
+        Some(_) => return Err("Unexpected tokens after WHERE clause".to_string()),
+        None => {}
+    }
+
+    Ok(SqlCommand {
+        table_name: table_name,
+        columns: vec![],
+    })
 }
 
 fn parse_insert(tokens: &[Token]) -> Result<SqlCommand, String> {
-    // Implementation for INSERT parsing
-    // ...
-    todo!()
+    let mut iter = tokens.iter().peekable();
+
+    // Expect INSERT keyword
+    match iter.next() {
+        Some(Token::Keyword(keyword)) if keyword == "INSERT" => {}
+        _ => return Err("Expected INSERT keyword".to_string()),
+    }
+
+    // Expect INTO keyword
+    match iter.next() {
+        Some(Token::Keyword(keyword)) if keyword == "INTO" => {}
+        _ => return Err("Expected INTO keyword".to_string()),
+    }
+
+    let table_name = match iter.next() {
+        Some(Token::Identifier(name)) => name.clone(),
+        _ => return Err("Expected table name".to_string()),
+    };
+
+    // Parse column values
+    let mut columns = Vec::new();
+    loop {
+        match iter.next() {
+            Some(Token::Symbol('(')) => continue,
+            Some(Token::Identifier(name)) => columns.push(name.clone()),
+            Some(Token::Symbol(',')) => continue,
+            Some(Token::Symbol(')')) => break,
+            _ => return Err("Expected column name or FROM keyword".to_string()),
+        }
+    }
+
+    // Expect VALUES keyword
+    match iter.next() {
+        Some(Token::Keyword(keyword)) => {}
+        _ => return Err("Expected VALUES keyword".to_string()),
+    }
+
+    // Parse values for each column
+    let mut values = Vec::new();
+    loop {
+        match iter.next() {
+            Some(Token::Symbol('(')) => continue,
+            Some(Token::Symbol('\'')) => continue,
+            Some(Token::Identifier(name)) => values.push(name.clone()),
+            Some(Token::Symbol(',')) => continue,
+            Some(Token::Symbol(')')) => break,
+            _ => return Err("Expected column name or FROM keyword".to_string()),
+        }
+    }
+
+    // Ensure we've consumed all tokens except for a possible semicolon
+    match iter.next() {
+        Some(Token::Semicolon) => {}
+        Some(_) => return Err("Unexpected tokens after WHERE clause".to_string()),
+        None => {}
+    }
+
+    Ok(SqlCommand::Insert {
+        table: table_name,
+        columns,
+        values,
+    })
 }
 
 fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
@@ -98,7 +189,7 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
 
     // Expect SELECT keyword
     match iter.next() {
-        Some(Token::Keyword(k)) if k == "SELECT" => {}
+        Some(Token::Keyword(keyword)) if keyword == "SELECT" => {}
         _ => return Err("Expected SELECT keyword".to_string()),
     }
 
@@ -107,6 +198,8 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
     loop {
         match iter.next() {
             Some(Token::Identifier(name)) => columns.push(name.clone()),
+            Some(Token::QuotedIdentifier(name)) => columns.push(name.clone()),
+            Some(Token::Symbol('*')) => columns.push("*".to_string()),
             Some(Token::Keyword(k)) if k == "FROM" => break,
             Some(Token::Symbol(',')) => continue,
             _ => return Err("Expected column name or FROM keyword".to_string()),
@@ -116,6 +209,7 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
     // Parse table name
     let table_name = match iter.next() {
         Some(Token::Identifier(name)) => name.clone(),
+        Some(Token::QuotedIdentifier(name)) => name.clone(),
         _ => return Err("Expected table name".to_string()),
     };
 
@@ -124,25 +218,246 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
     if let Some(Token::Keyword(k)) = iter.peek() {
         if k == "WHERE" {
             iter.next(); // consume WHERE keyword
-                         // Here you would parse the condition
-                         // For simplicity, we'll just collect the rest as a string
-            where_clause = Some(
-                iter.map(|t| format!("{:?}", t))
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            );
+            where_clause = Some(parse_where_clause(&mut iter)?);
         }
     }
-    // The parser can now construct the SqlCommand variants based on the tokens it receives from
-    // the tokenizera
+
+    // Ensure we've consumed all tokens except for a possible semicolon
+    match iter.next() {
+        Some(Token::Semicolon) => {}
+        Some(_) => return Err("Unexpected tokens after WHERE clause".to_string()),
+        None => {}
+    }
+
     Ok(SqlCommand::Select {
         table: table_name,
         columns,
-        where_clause: where_clause.map(|s| s.to_string()),
+        where_clause,
     })
-    // Ok(SqlCommand::Select {
-    //     table: table_name,
-    //     columns,
-    //     where_clause,
-    // })
+}
+
+fn parse_where_clause(iter: &mut std::iter::Peekable<std::slice::Iter<'_, Token>>) -> Result<Vec<Condition>, String> {
+    let mut conditions = Vec::new();
+
+    loop {
+        let left = match iter.next() {
+            Some(Token::Identifier(name)) | Some(Token::QuotedIdentifier(name)) => name.clone(),
+            _ => return Err("Expected identifier in WHERE clause".to_string()),
+        };
+
+        let operator = match iter.next() {
+            Some(Token::Symbol('=')) => "=".to_string(),
+            Some(Token::Symbol('>')) => ">".to_string(),
+            Some(Token::Symbol('<')) => "<".to_string(),
+            Some(Token::Symbol('!')) => {
+                if let Some(Token::Symbol('=')) = iter.next() {
+                    "!=".to_string()
+                } else {
+                    return Err("Expected '=' after '!' in WHERE clause".to_string());
+                }
+            },
+            _ => return Err("Expected comparison operator in WHERE clause".to_string()),
+        };
+
+        let right = match iter.next() {
+            Some(Token::Identifier(name)) | Some(Token::QuotedIdentifier(name)) => name.clone(),
+            Some(Token::Number(n)) => n.to_string(),
+            Some(Token::String(s)) => s.clone(),
+            _ => return Err("Expected value in WHERE clause".to_string()),
+        };
+
+        conditions.push(Condition::Comparison {
+            left,
+            operator,
+            right,
+        });
+
+        // Check for AND or OR keywords to continue the WHERE clause
+        match iter.peek() {
+            Some(Token::Keyword(k)) if k == "AND" || k == "OR" => {
+                // Here you could handle complex conditions with AND/OR
+                // For simplicity, we'll just consume the AND/OR and continue
+                iter.next();
+            },
+            _ => break,
+        }
+    }
+
+    Ok(conditions)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_select_basic() {
+        let tokens = vec![
+            Token::Keyword("SELECT".to_string()),
+            Token::Identifier("name".to_string()),
+            Token::Symbol(','),
+            Token::Identifier("age".to_string()),
+            Token::Keyword("FROM".to_string()),
+            Token::Identifier("users".to_string()),
+        ];
+
+        let result = parse_select(&tokens);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            SqlCommand::Select {
+                table: "users".to_string(),
+                columns: vec!["name".to_string(), "age".to_string()],
+                where_clause: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_select_with_where() {
+        let tokens = vec![
+            Token::Keyword("SELECT".to_string()),
+            Token::Identifier("name".to_string()),
+            Token::Keyword("FROM".to_string()),
+            Token::Identifier("users".to_string()),
+            Token::Keyword("WHERE".to_string()),
+            Token::Identifier("age".to_string()),
+            Token::Symbol('>'),
+            Token::Number(18),
+        ];
+
+        let result = parse_select(&tokens);
+        assert!(result.is_ok());
+
+        match result.unwrap() {
+            SqlCommand::Select { table, columns, where_clause } => {
+                assert_eq!(table, "users".to_string());
+                assert_eq!(columns, vec!["name".to_string()]);
+                assert!(where_clause.is_some());
+
+                let conditions = where_clause.unwrap();
+                assert_eq!(conditions.len(), 1);
+
+                match &conditions[0] {
+                    Condition::Comparison { left, operator, right } => {
+                        assert_eq!(left, "age");
+                        assert_eq!(operator, ">");
+                        assert_eq!(right, "18");
+                    },
+                    _ => panic!("Expected Comparison condition"),
+                }
+            },
+            _ => panic!("Expected Select command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_select_with_complex_where() {
+        let tokens = vec![
+            Token::Keyword("SELECT".to_string()),
+            Token::Identifier("name".to_string()),
+            Token::Symbol(','),
+            Token::Identifier("email".to_string()),
+            Token::Keyword("FROM".to_string()),
+            Token::Identifier("users".to_string()),
+            Token::Keyword("WHERE".to_string()),
+            Token::Identifier("age".to_string()),
+            Token::Symbol('>'),
+            Token::Number(18),
+            Token::Keyword("AND".to_string()),
+            Token::Identifier("status".to_string()),
+            Token::Symbol('='),
+            Token::String("active".to_string()),
+        ];
+
+        let result = parse_select(&tokens);
+        assert!(result.is_ok());
+
+        match result.unwrap() {
+            SqlCommand::Select { table, columns, where_clause } => {
+                assert_eq!(table, "users".to_string());
+                assert_eq!(columns, vec!["name".to_string(), "email".to_string()]);
+                assert!(where_clause.is_some());
+
+                let conditions = where_clause.unwrap();
+                assert_eq!(conditions.len(), 2);
+
+                match &conditions[0] {
+                    Condition::Comparison { left, operator, right } => {
+                        assert_eq!(left, "age");
+                        assert_eq!(operator, ">");
+                        assert_eq!(right, "18");
+                    },
+                    _ => panic!("Expected Comparison condition"),
+                }
+
+                match &conditions[1] {
+                    Condition::Comparison { left, operator, right } => {
+                        assert_eq!(left, "status");
+                        assert_eq!(operator, "=");
+                        assert_eq!(right, "active");
+                    },
+                    _ => panic!("Expected Comparison condition"),
+                }
+            },
+            _ => panic!("Expected Select command"),
+        }
+    }
+
+    #[test]
+    fn test_parse_select_error() {
+        let tokens = vec![
+            Token::Keyword("INSERT".to_string()),
+            Token::Identifier("name".to_string()),
+            Token::Keyword("FROM".to_string()),
+            Token::Identifier("users".to_string()),
+        ];
+
+        let result = parse_select(&tokens);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Expected SELECT keyword");
+    }
+
+    #[test]
+    fn test_parse_insert_basic() {
+        let tokens = vec![
+            Token::Keyword("INSERT".to_string()),
+            Token::Keyword("INTO".to_string()),
+            Token::Identifier("my table".to_string()),
+            Token::Symbol('('),
+            Token::Identifier("users".to_string()),
+            Token::Symbol(')'),
+            Token::Keyword("VALUES".to_string()),
+            Token::Symbol('('),
+            Token::Symbol('\''),
+            Token::Identifier("charles".to_string()),
+            Token::Symbol('\''),
+            Token::Symbol(')'),
+        ];
+
+        let result = parse_insert(&tokens);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            SqlCommand::Insert {
+                table: "my table".to_string(),
+                columns: vec!["users".to_string()],
+                values: vec!["charles".to_string()],
+            }
+        )
+    }
+
+    #[test]
+    fn test_parse_insert_error() {
+        let tokens = vec![
+            Token::Keyword("SELECT".to_string()),
+            Token::Identifier("name".to_string()),
+            Token::Keyword("FROM".to_string()),
+            Token::Identifier("users".to_string()),
+        ];
+
+        let result = parse_insert(&tokens);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Expected INSERT keyword");
+    }
 }
