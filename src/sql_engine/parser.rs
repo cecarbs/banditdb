@@ -70,11 +70,11 @@ use super::{Condition, SqlCommand};
 pub fn parse(tokens: &[Token]) -> Result<SqlCommand, String> {
     match tokens.get(0) {
         // TODO: redo this
-        Some(Token::Keyword(keyword)) => match keyword.as_str() {
-            "CREATE" => parse_create_table(tokens),
-            "INSERT" => parse_insert(tokens),
-            "SELECT" => parse_select(tokens),
-            _ => Err(format!("Unsupported command: {}", keyword)),
+        Some(Token::Keyword(keyword)) => match keyword {
+            Keyword::Create=> parse_create_table(tokens),
+            Keyword::Insert => parse_insert(tokens),
+            Keyword::Select => parse_select(tokens),
+            _ => Err("Unable to parse token: unsupported command.".to_string()),
         },
         _ => Err("Invalid SQL command".to_string()),
     }
@@ -234,14 +234,19 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
     };
 
     // Parse WHERE clause (if present)
-    let mut where_clause = None;
-    // TODO: pattern match here
-    if let Some(Token::Keyword(k)) = iter.peek() {
-        if k == "WHERE" {
+    let where_clause = match iter.peek() {
+        Some(Token::Keyword(Keyword::Where)) => {
             iter.next(); // consume WHERE keyword
-            where_clause = Some(parse_where_clause(&mut iter)?);
-        }
-    }
+            Some(parse_where_clause(&mut iter)?)
+        },
+        Some(Token::Keyword(_)) => {
+            return Err("Unexpected keyword after column list. Expected WHERE or end of statement.".to_string())
+        },
+        Some(_) => {
+            return Err("Unexpected token after column list. Expected WHERE or end of statement.".to_string())
+        },
+        None => None,
+    };
 
     // Ensure we've consumed all tokens except for a possible semicolon
     match iter.next() {
@@ -296,14 +301,16 @@ fn parse_where_clause(
         });
 
         // Check for AND or OR keywords to continue the WHERE clause
-        match iter.peek() {
-            Some(Token::Keyword(k)) if k == "AND" || k == "OR" => {
-                // Here you could handle complex conditions with AND/OR
-                // For simplicity, we'll just consume the AND/OR and continue
-                iter.next();
+        if let Some(Token::Keyword(keyword)) = iter.peek() {
+            match keyword {
+                Keyword::And | Keyword::Or => {
+                    // TODO: handle and / or cases
+                    iter.next();
+                }
+                _ => break,
             }
-            _ => break,
         }
+
     }
 
     Ok(conditions)
@@ -316,11 +323,11 @@ mod tests {
     #[test]
     fn test_parse_select_basic() {
         let tokens = vec![
-            Token::Keyword("SELECT".to_string()),
+            Token::Keyword(Keyword::Select),
             Token::Identifier("name".to_string()),
             Token::Symbol(','),
             Token::Identifier("age".to_string()),
-            Token::Keyword("FROM".to_string()),
+            Token::Keyword(Keyword::From),
             Token::Identifier("users".to_string()),
         ];
 
@@ -339,11 +346,11 @@ mod tests {
     #[test]
     fn test_parse_select_with_where() {
         let tokens = vec![
-            Token::Keyword("SELECT".to_string()),
+            Token::Keyword(Keyword::Select),
             Token::Identifier("name".to_string()),
-            Token::Keyword("FROM".to_string()),
+            Token::Keyword(Keyword::From),
             Token::Identifier("users".to_string()),
-            Token::Keyword("WHERE".to_string()),
+            Token::Keyword(Keyword::Where),
             Token::Identifier("age".to_string()),
             Token::Symbol('>'),
             Token::Number(18),
@@ -385,17 +392,17 @@ mod tests {
     #[test]
     fn test_parse_select_with_complex_where() {
         let tokens = vec![
-            Token::Keyword("SELECT".to_string()),
+            Token::Keyword(Keyword::Select),
             Token::Identifier("name".to_string()),
             Token::Symbol(','),
             Token::Identifier("email".to_string()),
-            Token::Keyword("FROM".to_string()),
+            Token::Keyword(Keyword::Select),
             Token::Identifier("users".to_string()),
-            Token::Keyword("WHERE".to_string()),
+            Token::Keyword(Keyword::Where),
             Token::Identifier("age".to_string()),
             Token::Symbol('>'),
             Token::Number(18),
-            Token::Keyword("AND".to_string()),
+            Token::Keyword(Keyword::And),
             Token::Identifier("status".to_string()),
             Token::Symbol('='),
             Token::String("active".to_string()),
@@ -450,9 +457,9 @@ mod tests {
     #[test]
     fn test_parse_select_error() {
         let tokens = vec![
-            Token::Keyword("INSERT".to_string()),
+            Token::Keyword(Keyword::Insert),
             Token::Identifier("name".to_string()),
-            Token::Keyword("FROM".to_string()),
+            Token::Keyword(Keyword::From),
             Token::Identifier("users".to_string()),
         ];
 
@@ -464,13 +471,13 @@ mod tests {
     #[test]
     fn test_parse_insert_basic() {
         let tokens = vec![
-            Token::Keyword("INSERT".to_string()),
-            Token::Keyword("INTO".to_string()),
+            Token::Keyword(Keyword::Insert),
+            Token::Keyword(Keyword::Into),
             Token::Identifier("my table".to_string()),
             Token::Symbol('('),
             Token::Identifier("users".to_string()),
             Token::Symbol(')'),
-            Token::Keyword("VALUES".to_string()),
+            Token::Keyword(Keyword::Values),
             Token::Symbol('('),
             Token::Symbol('\''),
             Token::Identifier("charles".to_string()),
@@ -493,9 +500,9 @@ mod tests {
     #[test]
     fn test_parse_insert_error() {
         let tokens = vec![
-            Token::Keyword("SELECT".to_string()),
+            Token::Keyword(Keyword::Select),
             Token::Identifier("name".to_string()),
-            Token::Keyword("FROM".to_string()),
+            Token::Keyword(Keyword::From),
             Token::Identifier("users".to_string()),
         ];
 

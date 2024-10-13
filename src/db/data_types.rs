@@ -28,6 +28,8 @@ pub enum Keyword {
     Values,
     Create,
     Table,
+    And,
+    Or,
 }
 
 // Used for defining the schema
