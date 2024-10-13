@@ -1,6 +1,6 @@
 use super::tokenizer::Token;
-use crate::db::data_types::{Column, DataType, Value};
-use crate::sql_engine::tokenizer::Token::Keyword;
+use crate::db::data_types::{Column, DataType, Value, Keyword};
+// use crate::sql_engine::tokenizer::Token::Keyword;
 // pub struct Repl {}
 //
 // impl Repl {
@@ -69,6 +69,7 @@ use super::{Condition, SqlCommand};
 
 pub fn parse(tokens: &[Token]) -> Result<SqlCommand, String> {
     match tokens.get(0) {
+        // TODO: redo this
         Some(Token::Keyword(keyword)) => match keyword.as_str() {
             "CREATE" => parse_create_table(tokens),
             "INSERT" => parse_insert(tokens),
@@ -84,8 +85,8 @@ fn parse_create_table(tokens: &[Token]) -> Result<SqlCommand, String> {
 
     loop {
         match iter.next() {
-            Some(Token::Keyword(keyword)) if keyword == "CREATE" => continue,
-            Some(Token::Keyword(keyword)) if keyword == "TABLE" => break,
+            Some(Token::Keyword(Keyword::Create)) => continue,
+            Some(Token::Keyword(Keyword::Table))  => break,
             _ => return Err("Expected CREATE TABLE keywords".to_string()),
         }
     }
@@ -95,12 +96,20 @@ fn parse_create_table(tokens: &[Token]) -> Result<SqlCommand, String> {
         _ => return Err("Expected table name".to_string()),
     };
 
-    let mut columns: Vec<Column> = Vec::new();
-    let mut data_types: Vec<String>
+    let mut columns: Vec<String> = Vec::new();
+    let mut data_types: Vec<DataType> = Vec::new();
     loop {
         match iter.next() {
             Some(Token::Symbol('(')) => continue,
-            Some(Token::Identifier()) =>
+            Some(Token::Identifier(name)) => {
+                columns.push(name.clone());
+
+                if let Some(Token::DataType(type_name)) = iter.next() {
+                    data_types.push(type_name.to_owned());
+                } else {
+                    return Err("Expected a data type after column name".to_string());
+                }
+            }
             Some(Token::Symbol(')')) => break,
             _ => return Err("Expected a column name or data type.".to_string()),
         }
@@ -109,13 +118,24 @@ fn parse_create_table(tokens: &[Token]) -> Result<SqlCommand, String> {
     // Ensure we've consumed all tokens except for a possible semicolon
     match iter.next() {
         Some(Token::Semicolon) => {}
-        Some(_) => return Err("Unexpected tokens after WHERE clause".to_string()),
+        Some(_) => return Err("Unexpected tokens after SEMICOLON".to_string()),
         None => {}
     }
-
-    Ok(SqlCommand {
-        table_name: table_name,
-        columns: vec![],
+    // Zip the column names and data types to create Column structs
+    // column_names.into_iter().zip(data_types.into_iter())
+    //     .map(|(name, data_type)| Column { name, data_type })
+    //     .collect()
+    let column_vec: Vec<Column> = columns
+        .into_iter()
+        .zip(data_types)
+        .map(|(column_name, data_type)| Column {
+            name: column_name,
+            data_type,
+        })
+        .collect();
+    Ok(SqlCommand::CreateTable {
+        name: table_name,
+        columns: column_vec,
     })
 }
 
@@ -124,13 +144,13 @@ fn parse_insert(tokens: &[Token]) -> Result<SqlCommand, String> {
 
     // Expect INSERT keyword
     match iter.next() {
-        Some(Token::Keyword(keyword)) if keyword == "INSERT" => {}
+        Some(Token::Keyword(Keyword::Insert)) => {}
         _ => return Err("Expected INSERT keyword".to_string()),
     }
 
     // Expect INTO keyword
     match iter.next() {
-        Some(Token::Keyword(keyword)) if keyword == "INTO" => {}
+        Some(Token::Keyword(Keyword::Into)) => {}
         _ => return Err("Expected INTO keyword".to_string()),
     }
 
@@ -189,7 +209,7 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
 
     // Expect SELECT keyword
     match iter.next() {
-        Some(Token::Keyword(keyword)) if keyword == "SELECT" => {}
+        Some(Token::Keyword(Keyword::Select)) => {}
         _ => return Err("Expected SELECT keyword".to_string()),
     }
 
@@ -200,7 +220,7 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
             Some(Token::Identifier(name)) => columns.push(name.clone()),
             Some(Token::QuotedIdentifier(name)) => columns.push(name.clone()),
             Some(Token::Symbol('*')) => columns.push("*".to_string()),
-            Some(Token::Keyword(k)) if k == "FROM" => break,
+            Some(Token::Keyword(Keyword::From)) => break,
             Some(Token::Symbol(',')) => continue,
             _ => return Err("Expected column name or FROM keyword".to_string()),
         }
@@ -215,6 +235,7 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
 
     // Parse WHERE clause (if present)
     let mut where_clause = None;
+    // TODO: pattern match here
     if let Some(Token::Keyword(k)) = iter.peek() {
         if k == "WHERE" {
             iter.next(); // consume WHERE keyword
@@ -236,7 +257,9 @@ fn parse_select(tokens: &[Token]) -> Result<SqlCommand, String> {
     })
 }
 
-fn parse_where_clause(iter: &mut std::iter::Peekable<std::slice::Iter<'_, Token>>) -> Result<Vec<Condition>, String> {
+fn parse_where_clause(
+    iter: &mut std::iter::Peekable<std::slice::Iter<'_, Token>>,
+) -> Result<Vec<Condition>, String> {
     let mut conditions = Vec::new();
 
     loop {
@@ -255,7 +278,7 @@ fn parse_where_clause(iter: &mut std::iter::Peekable<std::slice::Iter<'_, Token>
                 } else {
                     return Err("Expected '=' after '!' in WHERE clause".to_string());
                 }
-            },
+            }
             _ => return Err("Expected comparison operator in WHERE clause".to_string()),
         };
 
@@ -278,7 +301,7 @@ fn parse_where_clause(iter: &mut std::iter::Peekable<std::slice::Iter<'_, Token>
                 // Here you could handle complex conditions with AND/OR
                 // For simplicity, we'll just consume the AND/OR and continue
                 iter.next();
-            },
+            }
             _ => break,
         }
     }
@@ -330,7 +353,11 @@ mod tests {
         assert!(result.is_ok());
 
         match result.unwrap() {
-            SqlCommand::Select { table, columns, where_clause } => {
+            SqlCommand::Select {
+                table,
+                columns,
+                where_clause,
+            } => {
                 assert_eq!(table, "users".to_string());
                 assert_eq!(columns, vec!["name".to_string()]);
                 assert!(where_clause.is_some());
@@ -339,14 +366,18 @@ mod tests {
                 assert_eq!(conditions.len(), 1);
 
                 match &conditions[0] {
-                    Condition::Comparison { left, operator, right } => {
+                    Condition::Comparison {
+                        left,
+                        operator,
+                        right,
+                    } => {
                         assert_eq!(left, "age");
                         assert_eq!(operator, ">");
                         assert_eq!(right, "18");
-                    },
+                    }
                     _ => panic!("Expected Comparison condition"),
                 }
-            },
+            }
             _ => panic!("Expected Select command"),
         }
     }
@@ -374,7 +405,11 @@ mod tests {
         assert!(result.is_ok());
 
         match result.unwrap() {
-            SqlCommand::Select { table, columns, where_clause } => {
+            SqlCommand::Select {
+                table,
+                columns,
+                where_clause,
+            } => {
                 assert_eq!(table, "users".to_string());
                 assert_eq!(columns, vec!["name".to_string(), "email".to_string()]);
                 assert!(where_clause.is_some());
@@ -383,23 +418,31 @@ mod tests {
                 assert_eq!(conditions.len(), 2);
 
                 match &conditions[0] {
-                    Condition::Comparison { left, operator, right } => {
+                    Condition::Comparison {
+                        left,
+                        operator,
+                        right,
+                    } => {
                         assert_eq!(left, "age");
                         assert_eq!(operator, ">");
                         assert_eq!(right, "18");
-                    },
+                    }
                     _ => panic!("Expected Comparison condition"),
                 }
 
                 match &conditions[1] {
-                    Condition::Comparison { left, operator, right } => {
+                    Condition::Comparison {
+                        left,
+                        operator,
+                        right,
+                    } => {
                         assert_eq!(left, "status");
                         assert_eq!(operator, "=");
                         assert_eq!(right, "active");
-                    },
+                    }
                     _ => panic!("Expected Comparison condition"),
                 }
-            },
+            }
             _ => panic!("Expected Select command"),
         }
     }

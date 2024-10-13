@@ -1,13 +1,24 @@
+use crate::db::data_types::{DataType, Keyword};
+
 #[derive(Debug, PartialEq)]
 pub enum Token {
-    Keyword(String),
+    Keyword(Keyword),
     Identifier(String),
     QuotedIdentifier(String),
     Number(i64),
     String(String),
     Symbol(char),
-    DataType(String),
+    DataType(DataType),
     Semicolon,
+}
+impl Token {
+    pub fn as_data_type(&self) -> Option<&DataType> {
+        if let Self::DataType(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
 // Tokenizer (lexer) breaks down the raw string. For example: "SELECT name FROM users WHERE age >
@@ -28,15 +39,10 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, String> {
             }
             'A'..='Z' | 'a'..='z' | '_' => {
                 let word = consume_while(&mut chars, |c| c.is_alphanumeric() || c == '_');
-                if [
-                    "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "CREATE", "TABLE",
-                ].contains(&word.to_uppercase().as_str()) {
-                    tokens.push(Token::Keyword(word.to_uppercase()));
-                } else if [
-                    "INTEGER", "TEXT", "REAL", "BLOB", "NULL", "BOOLEAN", "DATE", "TIMESTAMP",
-                    "VARCHAR", "CHAR", "FLOAT", "DOUBLE", "DECIMAL"
-                ].contains(&word.to_uppercase().as_str()) {
-                    tokens.push(Token::DataType(word.to_uppercase()));
+                if let Some(keyword) = str_to_keyword(&word.as_str()) {
+                    tokens.push(Token::Keyword(keyword));
+                } else if let Some(data_type) = str_to_data_type(&word.as_str()) {
+                    tokens.push(Token::DataType(data_type));
                 } else {
                     tokens.push(Token::Identifier(word));
                 }
@@ -88,6 +94,39 @@ where
     result
 }
 
+fn str_to_data_type(s: &str) -> Option<DataType> {
+    match s.to_uppercase().as_str() {
+        "INTEGER" => Some(DataType::Integer),
+        "TEXT" => Some(DataType::Text),
+        "REAL" => Some(DataType::Real),
+        "BLOB" => Some(DataType::Blob),
+        "NULL" => Some(DataType::Null),
+        "BOOLEAN" => Some(DataType::Boolean),
+        "DATE" => Some(DataType::Date),
+        "TIMESTAMP" => Some(DataType::Timestamp),
+        "VARCHAR" => Some(DataType::Varchar),
+        "CHAR" => Some(DataType::Char),
+        "FLOAT" => Some(DataType::Float),
+        "DOUBLE" => Some(DataType::Double),
+        "DECIMAL" => Some(DataType::Decimal),
+        _ => None,
+    }
+}
+
+fn str_to_keyword(s: &str) -> Option<Keyword> {
+   match s.to_uppercase().as_str() {
+       "SELECT" => Some(Keyword::Select),
+       "FROM" => Some(Keyword::From),
+       "WHERE" => Some(Keyword::Where),
+       "INSERT" => Some(Keyword::Insert),
+       "INTO" => Some(Keyword::Into),
+       "VALUES" => Some(Keyword::Values),
+       "CREATE" => Some(Keyword::Create),
+       "TABLE" => Some(Keyword::Table),
+       _ => None,
+   }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,12 +137,16 @@ mod tests {
 
         let result: Result<Vec<Token>, String> = tokenize(input);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![
-            Token::Keyword(String::from("SELECT")),
-            Token::Symbol('*'),
-            Token::Keyword(String::from("FROM")),
-            Token::Identifier(String::from("users")),
-        ]);
+        assert_eq!(
+            result.unwrap(),
+            vec![
+                Token::Keyword(Keyword::Select),
+                Token::Symbol('*'),
+                Token::Keyword(Keyword::From),
+                Token::Identifier(String::from("users")),
+                Token::Semicolon,
+            ]
+        );
     }
 
     #[test]
@@ -112,22 +155,26 @@ mod tests {
 
         let result: Result<Vec<Token>, String> = tokenize(input);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![
-            Token::Keyword(String::from("INSERT")),
-            Token::Keyword(String::from("INTO")),
-            Token::Identifier(String::from("users")),
-            Token::Symbol('('),
-            Token::Identifier(String::from("id")),
-            Token::Symbol(','),
-            Token::Identifier(String::from("name")),
-            Token::Symbol(')'),
-            Token::Keyword(String::from("VALUES")),
-            Token::Symbol('('),
-            Token::Number(1),
-            Token::Symbol(','),
-            Token::String(String::from("Tom")),
-            Token::Symbol(')'),
-        ])
+        assert_eq!(
+            result.unwrap(),
+            vec![
+                Token::Keyword(Keyword::Insert),
+                Token::Keyword(Keyword::Into),
+                Token::Identifier(String::from("users")),
+                Token::Symbol('('),
+                Token::Identifier(String::from("id")),
+                Token::Symbol(','),
+                Token::Identifier(String::from("name")),
+                Token::Symbol(')'),
+                Token::Keyword(Keyword::Values),
+                Token::Symbol('('),
+                Token::Number(1),
+                Token::Symbol(','),
+                Token::String(String::from("Tom")),
+                Token::Symbol(')'),
+                Token::Semicolon,
+            ]
+        )
     }
 
     #[test]
@@ -136,18 +183,21 @@ mod tests {
 
         let result: Result<Vec<Token>, String> = tokenize(input);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![
-            Token::Keyword("CREATE".to_string()),
-            Token::Keyword("TABLE".to_string()),
-            Token::Identifier("my_table".to_string()),
-            Token::Symbol('('),
-            Token::Identifier("id".to_string()),
-            Token::DataType("INTEGER".to_string()),
-            Token::Symbol(','),
-            Token::Identifier("name".to_string()),
-            Token::DataType("TEXT".to_string()),
-            Token::Symbol(')'),
-            Token::Semicolon,
-        ])
+        assert_eq!(
+            result.unwrap(),
+            vec![
+                Token::Keyword(Keyword::Create),
+                Token::Keyword(Keyword::Table),
+                Token::Identifier("my_table".to_string()),
+                Token::Symbol('('),
+                Token::Identifier("id".to_string()),
+                Token::DataType(DataType::Integer),
+                Token::Symbol(','),
+                Token::Identifier("name".to_string()),
+                Token::DataType(DataType::Text),
+                Token::Symbol(')'),
+                Token::Semicolon,
+            ]
+        )
     }
 }

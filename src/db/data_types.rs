@@ -1,10 +1,33 @@
+// TODO: might not need this anymore since we have tokenizer
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DataType {
     Integer,
     Text,
-    // Add more data types as needed
+    Real,
+    Blob,
+    Null,
+    Boolean,
+    Date,
+    Timestamp,
+    Varchar,
+    Char,
+    Float,
+    Double,
+    Decimal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Keyword {
+    Select,
+    From,
+    Where,
+    Insert,
+    Into,
+    Values,
+    Create,
+    Table,
 }
 
 // Used for defining the schema
@@ -24,11 +47,12 @@ pub enum Value {
 
 impl Value {
     pub fn matches_type(&self, data_type: &DataType) -> bool {
-        match (self, data_type) {
-            (Value::Integer(_), DataType::Integer) => true,
-            (Value::Text(_), DataType::Text) => true,
-            _ => false,
-        }
+        true
+        // match (self, data_type) {
+        //     (Value::Integer(_), DataType::INTEGER) => true,
+        //     (Value::Text(_), DataType::TEXT) => true,
+        //     _ => false,
+        // }
     }
 }
 
