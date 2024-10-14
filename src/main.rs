@@ -118,10 +118,12 @@ use std::path::Path;
 //     Ok(())
 // }
 
+#[allow(unused_variables)]
 fn main() -> io::Result<()> {
+    // To run application use cargo run -- my_database_name
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
-        eprintln!("Usage: {} <database_name>", args[0]);
+        eprint!("Main: invalid number of arguments.");
         std::process::exit(1);
     }
 
@@ -129,10 +131,10 @@ fn main() -> io::Result<()> {
     let db_path = Path::new("src").join(format!("{}.db", db_name));
 
     let mut database = if db_path.exists() {
-        println!("Loading existing database: {}", db_path.display());
+        println!("Main: loading existing database: {}", db_path.display());
         Database::load_from_file(&db_path)?
     } else {
-        println!("Creating new database: {}", db_path.display());
+        println!("Main: creating new database: {}", db_path.display());
         Database::new()
     };
 
@@ -157,9 +159,9 @@ fn main() -> io::Result<()> {
                     println!("{}", message);
                     database.save_to_file(&db_path)?;
                 }
-                Err(e) => println!("Error executing command: {}", e),
+                Err(e) => println!("Main: error executing command: {}", e),
             },
-            Err(e) => println!("Error processing SQL: {}", e),
+            Err(e) => println!("Main: error processing SQL: {}", e),
         }
     }
 
@@ -172,7 +174,7 @@ fn execute_command(database: &mut Database, command: SqlCommand) -> Result<Strin
     match command {
         SqlCommand::CreateTable { name, columns } => {
             database.create_table(name.clone(), columns);
-            Ok(format!("Table '{}' created successfully.", name))
+            Ok(format!("Main: table '{}' created successfully.", name))
         }
         SqlCommand::Insert {
             table,
@@ -181,19 +183,23 @@ fn execute_command(database: &mut Database, command: SqlCommand) -> Result<Strin
         } => {
             // TODO: fix method
             // database.insert_row(&table, values)?;
-            Ok(format!("Row inserted successfully into table '{}'.", table))
+            Ok(format!(
+                "Main: row inserted successfully into table '{}'.",
+                table
+            ))
         }
         SqlCommand::Select {
             table,
             columns,
             where_clause,
+            join_clause,
         } => {
             let result = database.select(&table, &columns)?;
             // Assuming you have a function to pretty print the result
             // TODO: either put the logic in here to print the table, leave logic in the table, or
             // return the table
             // print_result(&result, &columns);
-            Ok("Query executed successfully.".to_string())
+            Ok("Main: query executed successfully.".to_string())
         }
     }
 }

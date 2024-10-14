@@ -30,6 +30,8 @@ pub enum Keyword {
     Table,
     And,
     Or,
+    Join,
+    On,
 }
 
 // Used for defining the schema
@@ -37,6 +39,12 @@ pub enum Keyword {
 pub struct Column {
     pub name: String,
     pub data_type: DataType,
+}
+
+impl Column {
+    pub fn new(name: String, data_type: DataType) -> Column {
+        Self { name, data_type }
+    }
 }
 
 // Used for defining the schema

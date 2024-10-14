@@ -12,7 +12,6 @@ pub fn process_sql(input: &str) -> Result<SqlCommand, String> {
         Ok(tokens) => parser::parse(&tokens),
         Err(e) => Err(e),
     }
-
 }
 
 // Use struct like enum to hold the data and represent the different types of operations useful to
@@ -33,6 +32,7 @@ pub enum SqlCommand {
         table: String,
         columns: Vec<String>,
         where_clause: Option<Vec<Condition>>,
+        join_clause: Option<Vec<Join>>,
     },
     // Add other command types as needed
 }
@@ -44,5 +44,23 @@ pub enum Condition {
         operator: String,
         right: String,
     },
-    // Add more variants as needed, e.g., for AND, OR, etc.
+    // TODO:Add more variants as needed, e.g., for AND, OR, etc.
 }
+
+#[derive(Debug, PartialEq)]
+pub enum Join {
+    InnerJoin { table_a: String, table_b: String }, // TODO: add more if necessary
+}
+
+// #[derive(Debug)]
+// pub enum SelectCaluse {
+//     Where(Vec<Condition>),
+//     InnerJoin(String),
+//     End,
+// }
+//
+// #[derive(Debug)]
+// pub enum ParseError {
+//     InvalidSyntax(String),
+//     UnexpectedToken(String),
+// }

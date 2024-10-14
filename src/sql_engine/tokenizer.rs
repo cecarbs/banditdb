@@ -11,15 +11,6 @@ pub enum Token {
     DataType(DataType),
     Semicolon,
 }
-impl Token {
-    pub fn as_data_type(&self) -> Option<&DataType> {
-        if let Self::DataType(v) = self {
-            Some(v)
-        } else {
-            None
-        }
-    }
-}
 
 // Tokenizer (lexer) breaks down the raw string. For example: "SELECT name FROM users WHERE age >
 // 18" can be broken down into a list of tokens ([Keyword("SELECT"), Identifier("name"),
@@ -39,9 +30,9 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, String> {
             }
             'A'..='Z' | 'a'..='z' | '_' => {
                 let word = consume_while(&mut chars, |c| c.is_alphanumeric() || c == '_');
-                if let Some(keyword) = str_to_keyword(&word.as_str()) {
+                if let Some(keyword) = str_to_keyword(word.as_str()) {
                     tokens.push(Token::Keyword(keyword));
-                } else if let Some(data_type) = str_to_data_type(&word.as_str()) {
+                } else if let Some(data_type) = str_to_data_type(word.as_str()) {
                     tokens.push(Token::DataType(data_type));
                 } else {
                     tokens.push(Token::Identifier(word));
@@ -114,17 +105,21 @@ fn str_to_data_type(s: &str) -> Option<DataType> {
 }
 
 fn str_to_keyword(s: &str) -> Option<Keyword> {
-   match s.to_uppercase().as_str() {
-       "SELECT" => Some(Keyword::Select),
-       "FROM" => Some(Keyword::From),
-       "WHERE" => Some(Keyword::Where),
-       "INSERT" => Some(Keyword::Insert),
-       "INTO" => Some(Keyword::Into),
-       "VALUES" => Some(Keyword::Values),
-       "CREATE" => Some(Keyword::Create),
-       "TABLE" => Some(Keyword::Table),
-       _ => None,
-   }
+    match s.to_uppercase().as_str() {
+        "SELECT" => Some(Keyword::Select),
+        "FROM" => Some(Keyword::From),
+        "WHERE" => Some(Keyword::Where),
+        "INSERT" => Some(Keyword::Insert),
+        "INTO" => Some(Keyword::Into),
+        "VALUES" => Some(Keyword::Values),
+        "CREATE" => Some(Keyword::Create),
+        "TABLE" => Some(Keyword::Table),
+        "OR" => Some(Keyword::Or),
+        "AND" => Some(Keyword::And),
+        "JOIN" => Some(Keyword::Join),
+        "ON" => Some(Keyword::On),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

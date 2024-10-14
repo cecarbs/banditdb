@@ -13,6 +13,7 @@ pub struct Database {
 }
 
 impl Database {
+    // TODO: change tables to use sled B-Tree, for now just log and make sure the commands are correct
     pub fn new() -> Self {
         Database {
             tables: BTreeMap::new(),
