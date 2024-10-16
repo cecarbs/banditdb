@@ -1,84 +1,54 @@
-use sled::{Db, IVec};
-use std::collections::HashMap;
-use std::str;
-use serde::{Serialize, Deserialize};
-use bincode;
-use crate::db::data_types::Column;
+use std::{collections::HashMap, error::Error};
 
-#[derive(Serialize, Deserialize, Debug)]
+use serde::Serialize;
+use sled::Db;
+
+use super::data_types::{Column, ForeignKey};
+
+#[derive(Serialize)]
 struct Table {
     name: String,
     columns: Vec<Column>,
+    foreign_keys: Vec<ForeignKey>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Row {
-    values: HashMap<String, String>,
-}
-
-struct SimpleDatabase {
+struct Database {
     db: Db,
+    tables: HashMap<String, Table>,
 }
 
-impl SimpleDatabase {
-    fn new(path: &str) -> Result<Self, sled::Error> {
+impl Database {
+    pub fn new(path: &str) -> Result<Self, sled::Error> {
         let db = sled::open(path)?;
-        Ok(SimpleDatabase { db })
+        Ok(Self {
+            db,
+            tables: HashMap::new(),
+        })
     }
 
-    fn create_table(&self, table_name: &str, columns: Vec<Column>) -> Result<(), Box<dyn std::error::Error>> {
-        let table = Table {
-            name: table_name.to_string(),
-            columns,
-        };
-        let table_data = bincode::serialize(&table)?;
-        self.db.insert(format!("table:{}", table_name), table_data)?;
-        self.db.flush()?;
+    pub fn create_table(&mut self, table: Table) -> Result<(), Box<dyn Error>> {
+        let table_name = table.name.clone();
+        self.tables.insert(table_name.clone(), table);
+        let serialized = bincode::serialize(&self.tables.get(&table_name).unwrap())?;
+        self.db.insert(table_name.as_bytes(), serialized)?;
         Ok(())
     }
 
-    fn insert_row(&self, table_name: &str, row_data: HashMap<String, String>) -> Result<(), Box<dyn std::error::Error>> {
-        let table: Table = self.get_table(table_name)?;
+    pub fn insert(
+        &self,
+        table_name: &str,
+        data: HashMap<String, String>,
+    ) -> Result<(), Box<dyn Error>> {
+        let table = self.tables.get(table_name).ok_or("Table not found.")?;
+        let mut serialized_data = Vec::new();
 
-        // Validate that all required columns are present
-        for col in &table.columns {
-            if !row_data.contains_key(col) {
-                return Err(format!("Missing column: {}", col).into());
-            }
+        for column in &table.columns {
+            let value = data.get(&column.name).ok_or("Column not found in data")?;
+            serialized_data.extend_from_slice(value.as_bytes());
         }
 
-        let row = Row { values: row_data };
-        let row_id = self.db.generate_id()?;
-        let row_key = format!("{}:{}", table_name, row_id);
-        let row_data = bincode::serialize(&row)?;
+        table.columns.iter();
 
-        self.db.insert(row_key, row_data)?;
-        self.db.flush()?;
         Ok(())
-    }
-
-    fn get_table(&self, table_name: &str) -> Result<Table, Box<dyn std::error::Error>> {
-        let table_data = self.db.get(format!("table:{}", table_name))?
-            .ok_or("Table not found")?;
-        let table: Table = bincode::deserialize(&table_data)?;
-        Ok(table)
-    }
-
-    fn get_row(&self, table_name: &str, row_id: u64) -> Result<Row, Box<dyn std::error::Error>> {
-        let row_key = format!("{}:{}", table_name, row_id);
-        let row_data = self.db.get(row_key)?.ok_or("Row not found")?;
-        let row: Row = bincode::deserialize(&row_data)?;
-        Ok(row)
-    }
-
-    fn scan_table(&self, table_name: &str) -> impl Iterator<Item = Result<Row, Box<dyn std::error::Error>>> + '_ {
-        self.db
-            .scan_prefix(table_name)
-            .filter_map(Result::ok)
-            .filter(|(key, _)| !key.starts_with(b"table:"))
-            .map(move |(_, value)| {
-                bincode::deserialize(&value)
-                    .map_err(|e| e.into())
-            })
     }
 }

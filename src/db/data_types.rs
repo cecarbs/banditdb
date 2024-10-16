@@ -47,6 +47,13 @@ impl Column {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ForeignKey {
+    column: String,
+    references: String,
+    referenced_column: String,
+}
+
 // Used for defining the schema
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
